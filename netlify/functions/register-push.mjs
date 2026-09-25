@@ -3,8 +3,14 @@ import webpush from "web-push";
 
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
+const rawSubject = process.env.VAPID_SUBJECT?.trim();
+
 const VAPID_SUBJECT =
-  process.env.VAPID_SUBJECT || "mailto:admin@example.com";
+  rawSubject
+    ? rawSubject.includes(":")
+      ? rawSubject
+      : `mailto:${rawSubject}`
+    : "mailto:admin@example.com";
 
 export default async (req) => {
   if (req.method === "GET") {
