@@ -141,27 +141,79 @@ function Calendar({tests,onEdit}) {
 
 function Settings({data,setData,notify}) {
   const [key,setKey]=useState(data.settings.geminiKey);
-  const [push,setPush]=useState(Notification?.permission==="granted");
+  const [push,setPush]=useState(typeof Notification !== "undefined" && Notification.permission==="granted");
+  const [testingPush,setTestingPush]=useState(false);
   const saveKey=()=>{setData(d=>({...d,settings:{...d.settings,geminiKey:key.trim()}}));notify("Podešavanja su sačuvana.");};
-  async function enablePush(){
-    if(!("Notification" in window)||!("serviceWorker" in navigator)) return notify("Ovaj pregledač ne podržava obaveštenja.");
-    const p=await Notification.requestPermission();
-    if(p!=="granted") return notify("Dozvola za obaveštenja nije odobrena.");
-    setPush(true);
-    if(VAPID_PUBLIC){
-      const reg=await navigator.serviceWorker.ready;
-      const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC)});
-      await fetch("/.netlify/functions/register-push",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({deviceId:deviceId(),subscription:sub.toJSON(),tests:data.tests})}).catch(()=>{});
-      notify("Obaveštenja su uključena.");
-    } else notify("Obaveštenja u pregledaču su uključena. Za push kada je aplikacija zatvorena podesi VAPID ključ na Netlify-ju.");
+
+  async function getSubscription(){
+    const reg=await navigator.serviceWorker.ready;
+    const existing=await reg.pushManager.getSubscription();
+    if(existing) return existing;
+
+    const keyResponse=await fetch("/.netlify/functions/register-push");
+    if(!keyResponse.ok) throw new Error("Server nije dostupan.");
+    const {publicKey}=await keyResponse.json();
+    if(!publicKey) throw new Error("VAPID public ključ nije podešen na Netlify-ju.");
+
+    return reg.pushManager.subscribe({
+      userVisibleOnly:true,
+      applicationServerKey:urlBase64ToUint8Array(publicKey)
+    });
   }
+
+  async function enablePush(){
+    if(!window.isSecureContext) return notify("Obaveštenja zahtevaju HTTPS.");
+    if(!("Notification" in window)||!("serviceWorker" in navigator)||!("PushManager" in window)) return notify("Ovaj uređaj/pregledač ne podržava web push.");
+
+    try {
+      const p=Notification.permission==="granted" ? "granted" : await Notification.requestPermission();
+      if(p!=="granted") return notify("Dozvola za obaveštenja nije odobrena.");
+      const sub=await getSubscription();
+      const res=await fetch("/.netlify/functions/register-push",{
+        method:"POST",
+        headers:{"content-type":"application/json"},
+        body:JSON.stringify({deviceId:deviceId(),subscription:sub.toJSON(),tests:data.tests})
+      });
+      if(!res.ok) throw new Error("Registracija obaveštenja nije uspela.");
+      setPush(true);
+      notify("Obaveštenja su uključena.");
+    } catch(e) {
+      notify(e.message||"Greška pri uključivanju obaveštenja.");
+    }
+  }
+
+  async function sendTestNotification(){
+    if(testingPush) return;
+    setTestingPush(true);
+    try {
+      if(!window.isSecureContext) throw new Error("Obaveštenja zahtevaju HTTPS.");
+      if(!("Notification" in window)||!("serviceWorker" in navigator)||!("PushManager" in window)) throw new Error("Ovaj uređaj/pregledač ne podržava web push.");
+      if(Notification.permission!=="granted") throw new Error("Prvo uključi obaveštenja.");
+
+      const sub=await getSubscription();
+      const res=await fetch("/.netlify/functions/register-push",{
+        method:"POST",
+        headers:{"content-type":"application/json"},
+        body:JSON.stringify({deviceId:deviceId(),subscription:sub.toJSON(),tests:data.tests,test:true})
+      });
+      const result=await res.json().catch(()=>({}));
+      if(!res.ok || !result.ok) throw new Error(result.error||"Test notifikacija nije poslata.");
+      notify("Test notifikacija je poslata. 📱");
+    } catch(e) {
+      notify(e.message||"Greška pri slanju test notifikacije.");
+    } finally {
+      setTestingPush(false);
+    }
+  }
+
   return <section className="page narrow"><p className="eyebrow">PODEŠAVANJA</p><h1>Podešavanja</h1>
     <div className="settingsCard">
       <div className="setting"><div><h3>Gemini API ključ</h3><p className="muted">Ključ se čuva samo na ovom uređaju. Koristi se za prepoznavanje testova sa slike.</p></div><input className="apiInput" type="password" value={key} onChange={e=>setKey(e.target.value)} placeholder="AIza..."/><button className="secondary" onClick={saveKey}>Sačuvaj</button></div>
       <div className="setting"><div><h3>Obaveštenja</h3><p className="muted">{push?"Dozvoljena su na ovom uređaju.":"Uključi podsetnike za testove."}</p></div><button className="primary" onClick={enablePush}>{push?"Obaveštenja uključena":"Uključi obaveštenja"}</button></div>
+      {push && <div className="setting"><div><h3>Testiraj obaveštenje</h3><p className="muted">Pošalji odmah jednu probnu push notifikaciju na ovaj uređaj.</p></div><button className="secondary" disabled={testingPush} onClick={sendTestNotification}>{testingPush?"Šaljem…":"Pošalji test notifikaciju"}</button></div>}
       <div className="setting"><div><h3>Podrazumevani podsetnik</h3><p className="muted">Predlog koji se automatski bira pri dodavanju testa.</p></div><select value={data.settings.defaultReminder} onChange={e=>setData(d=>({...d,settings:{...d.settings,defaultReminder:e.target.value}}))}><option value="week">7 dana pre</option><option value="2d">2 dana pre</option><option value="1d">1 dan pre</option></select></div>
     </div>
-    <div className="note"><strong>iPhone</strong><p>Otvori sajt u Safari-ju → Share → Add to Home Screen → Open as Web App. Tako dobijaš aplikaciju na početnom ekranu i web push podršku.</p></div>
+    <div className="note"><strong>iPhone</strong><p>Za iPhone: otvori sajt u Safari-ju → Share → Add to Home Screen → Open as Web App. Zatim uključi obaveštenja iz aplikacije.</p></div>
   </section>
 }
 
