@@ -53,11 +53,41 @@ function App() {
   const upcoming = useMemo(() => [...data.tests].filter(t => new Date(t.date) >= new Date(Date.now()-3600000)).sort((a,b)=>new Date(a.date)-new Date(b.date)), [data.tests]);
   const notify = msg => { setToast(msg); setTimeout(()=>setToast(""), 3200); };
 
+  const syncPushData = async tests => {
+    try {
+      if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) return;
+      await fetch("/.netlify/functions/register-push", {
+        method: "POST",
+        headers: {"content-type":"application/json"},
+        body: JSON.stringify({
+          deviceId: deviceId(),
+          subscription: sub.toJSON(),
+          tests,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Belgrade"
+        })
+      });
+    } catch {}
+  };
+
   const addTest = test => {
-    setData(d => ({...d, tests: [...d.tests.filter(x=>x.id!==test.id), test]}));
+    setData(d => {
+      const tests = [...d.tests.filter(x=>x.id!==test.id), test];
+      void syncPushData(tests);
+      return {...d, tests};
+    });
     setPage("pregled"); setEditing(null); notify("Test je sačuvan.");
   };
-  const remove = id => setData(d => ({...d, tests:d.tests.filter(t=>t.id!==id)}));
+  const remove = id => {
+    setData(d => {
+      const tests = d.tests.filter(t=>t.id!==id);
+      void syncPushData(tests);
+      return {...d, tests};
+    });
+  };
 
   return <div className="app">
     <header className="topbar">
@@ -75,7 +105,14 @@ function App() {
       {page==="kalendar" && <Calendar tests={upcoming} onEdit={t=>{setEditing(t);setPage("novi")}} />}
       {page==="novi" && <TestForm initial={editing} defaultReminder={data.settings.defaultReminder} onCancel={()=>setPage("pregled")} onSave={addTest} />}
       {page==="podesavanja" && <Settings data={data} setData={setData} notify={notify} />}
-      <ImportModal open={importing} onClose={()=>setImporting(false)} apiKey={data.settings.geminiKey} onImported={tests=>{setData(d=>({...d,tests:[...d.tests,...tests]}));setImporting(false);setPage("pregled");notify(`${tests.length} testova je uvezeno.`)}} />
+      <ImportModal open={importing} onClose={()=>setImporting(false)} apiKey={data.settings.geminiKey} onImported={tests=>{
+        setData(d=>{
+          const allTests=[...d.tests,...tests];
+          void syncPushData(allTests);
+          return {...d,tests:allTests};
+        });
+        setImporting(false);setPage("pregled");notify(`${tests.length} testova je uvezeno.`);
+      }} />
     </main>
 
     {page==="pregled" && <button className="aiFab" onClick={()=>setImporting(true)}>✦ <span>Uvezi sa slike</span></button>}
@@ -172,7 +209,12 @@ function Settings({data,setData,notify}) {
       const res=await fetch("/.netlify/functions/register-push",{
         method:"POST",
         headers:{"content-type":"application/json"},
-        body:JSON.stringify({deviceId:deviceId(),subscription:sub.toJSON(),tests:data.tests})
+        body:JSON.stringify({
+          deviceId:deviceId(),
+          subscription:sub.toJSON(),
+          tests:data.tests,
+          timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Belgrade"
+        })
       });
       if(!res.ok) throw new Error("Registracija obaveštenja nije uspela.");
       setPush(true);
@@ -194,7 +236,13 @@ function Settings({data,setData,notify}) {
       const res=await fetch("/.netlify/functions/register-push",{
         method:"POST",
         headers:{"content-type":"application/json"},
-        body:JSON.stringify({deviceId:deviceId(),subscription:sub.toJSON(),tests:data.tests,test:true})
+        body:JSON.stringify({
+          deviceId:deviceId(),
+          subscription:sub.toJSON(),
+          tests:data.tests,
+          timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Belgrade",
+          test:true
+        })
       });
       const result=await res.json().catch(()=>({}));
       if(!res.ok || !result.ok) throw new Error(result.error||"Test notifikacija nije poslata.");
