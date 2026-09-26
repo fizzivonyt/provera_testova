@@ -102,12 +102,12 @@ function App() {
 
     <main>
       {page==="pregled" && <Dashboard
-  tests={upcoming}
-  onAdd={()=>{setEditing({id:uid(),name:"",date:"",reminders:[]});setPage("novi")}}
-  onImport={()=>setImporting(true)}
-  onEdit={t=>{setEditing(t);setPage("novi")}}
-  onDelete={remove}
-/>}
+        tests={upcoming}
+        onAdd={()=>{setEditing({id:uid(),name:"",date:"",reminders:[]});setPage("novi")}}
+        onImport={()=>setImporting(true)}
+        onEdit={t=>{setEditing(t);setPage("novi")}}
+        onDelete={remove}
+      />}
       {page==="kalendar" && <Calendar tests={upcoming} onEdit={t=>{setEditing(t);setPage("novi")}} />}
       {page==="novi" && <TestForm initial={editing} defaultReminder={data.settings.defaultReminder} onCancel={()=>setPage("pregled")} onSave={addTest} />}
       {page==="podesavanja" && <Settings data={data} setData={setData} notify={notify} />}
@@ -121,33 +121,81 @@ function App() {
       }} />
     </main>
 
-    {page==="pregled" && <button className="aiFab" onClick={()=>setImporting(true)}>✦ <span>Uvezi sa slike</span></button>}
     {toast && <div className="toast">{toast}</div>}
   </div>
 }
 
-function Dashboard({tests,onAdd,onEdit,onDelete}) {
+function Dashboard({tests,onAdd,onImport,onEdit,onDelete}) {
+  const [deleteTest, setDeleteTest] = useState(null);
   const next = tests[0];
+
+  const confirmDelete = () => {
+    if (!deleteTest) return;
+    onDelete(deleteTest.id);
+    setDeleteTest(null);
+  };
+
   return <section className="page">
     <div className="hero">
-      <div><p className="eyebrow">ŠKOLSKI PLANER</p><h1>Ne zaboravi nijedan test.</h1><p className="muted">Svi testovi, datumi i podsetnici na jednom mestu.</p></div>
-      <button className="primary" onClick={onAdd}>+ Novi test</button>
+      <div>
+        <p className="eyebrow">ŠKOLSKI PLANER</p>
+        <h1>Ne zaboravi nijedan test.</h1>
+        <p className="muted">Svi testovi, datumi i podsetnici na jednom mestu.</p>
+      </div>
+
+      <div style={{display:"flex",gap:"10px",flexWrap:"wrap"}}>
+        <button className="secondary" onClick={onImport}>
+          ✦ Uvezi sa slike
+        </button>
+
+        <button className="primary" onClick={onAdd}>
+          + Novi test
+        </button>
+      </div>
     </div>
-    {next && <div className="nextCard">
-      <div><div className="label">SLEDEĆI TEST</div><h2>{next.name}</h2><p>{fmtDate(next.date)} · {fmtTime(next.date)}</p></div>
-      <div className="count">{countdown(next.date)}</div>
-    </div>}
-    <div className="sectionHead"><div><h2>Predstojeći testovi</h2><p className="muted">{tests.length ? `${tests.length} ${tests.length===1?"test":"testova"}` : "Još nema testova"}</p></div></div>
-    <div className="testList">
-      {!tests.length && <Empty onAdd={onAdd}/>}
-      {tests.map(t=><article className="testRow" key={t.id}>
-        <div className="dateBox"><strong>{new Date(t.date).getDate()}</strong><span>{new Intl.DateTimeFormat("sr-RS",{month:"short"}).format(new Date(t.date)).replace(".","")}</span></div>
-        <div className="testInfo"><h3>{t.name}</h3><p>{fmtDate(t.date)} · {fmtTime(t.date)}</p></div>
-        <div className="rowRight"><span className="pill">{countdown(t.date)}</span><div className="actions"><button onClick={()=>onEdit(t)}>Izmeni</button><button className="dangerText" onClick={()=>onDelete(t.id)}>Obriši</button></div></div>
-      </article>)}
-    </div>
+
+    {tests.length === 0
+      ? <Empty onAdd={onAdd} />
+      : <div className="testList">
+          {tests.map(t => (
+            <div className="testCard" key={t.id}>
+              <div className="testInfo">
+                <span className="testName">{t.name}</span>
+                <span className="testDate">{fmtDate(t.date)} u {fmtTime(t.date)}</span>
+                <span className="testCountdown">{countdown(t.date)}</span>
+              </div>
+              <div className="testActions">
+                <button className="secondary" onClick={()=>onEdit(t)}>Izmeni</button>
+                <button className="dangerText" onClick={()=>setDeleteTest(t)}>Obriši</button>
+              </div>
+            </div>
+          ))}
+        </div>
+    }
+
+    {deleteTest && (
+      <div className="modalBack">
+        <div className="modal">
+          <p className="eyebrow">BRISANJE TESTA</p>
+          <h2>Da li stvarno želiš da obrišeš ovaj test?</h2>
+          <p className="muted">
+            Test „{deleteTest.name}" će biti uklonjen iz aplikacije.
+            Ova radnja ne može da se poništi.
+          </p>
+          <div className="formActions">
+            <button className="secondary" onClick={()=>setDeleteTest(null)}>
+              Otkaži
+            </button>
+            <button className="dangerButton" onClick={confirmDelete}>
+              Obriši test
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   </section>
 }
+
 function Empty({onAdd}) { return <div className="empty"><div className="emptyIcon">＋</div><h3>Još nema testova</h3><p>Dodaj prvi test i napravi podsetnike.</p><button className="secondary" onClick={onAdd}>Dodaj prvi test</button></div> }
 
 function TestForm({initial,defaultReminder,onCancel,onSave}) {
@@ -291,6 +339,7 @@ function ImportModal({open,onClose,apiKey,onImported}) {
   }
   return <div className="modalBack"><div className="modal"><button className="modalClose" onClick={onClose}>×</button><p className="eyebrow">GEMINI UVOZ</p><h2>Uvezi testove sa slike</h2><p className="muted">Slikaj raspored ili list papira sa više testova. Gemini će pokušati da prepozna nazive i datume.</p><label className="drop">{file?<><strong>{file.name}</strong><span>Spremno za obradu</span></>:<><strong>Izaberi fotografiju</strong><span>JPG, PNG ili HEIC koji telefon može da prosledi</span></>}<input type="file" accept="image/*" onChange={e=>setFile(e.target.files?.[0]||null)}/></label>{error&&<div className="error">{error}</div>}<div className="formActions"><button className="secondary" onClick={onClose}>Otkaži</button><button className="primary" disabled={busy} onClick={run}>{busy?"Prepoznajem…":"Prepoznaj testove"}</button></div></div></div>
 }
+
 const toBase64=file=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(",")[1]);r.onerror=reject;r.readAsDataURL(file)});
 function urlBase64ToUint8Array(base64String){const padding="=".repeat((4-base64String.length%4)%4);const raw=atob((base64String+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));}
 
