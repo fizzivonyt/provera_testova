@@ -699,3 +699,69 @@ body {
 .dangerButton:hover {
   background: #b91c1c;
 }
+
+/* ── Test kartice ── */
+.testList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.testCard {
+  background: #fff;
+  border: 1px solid #dfdfda;
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.testInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.testName {
+  font-size: 15px;
+  font-weight: 650;
+  color: #171717;
+}
+
+.testDate {
+  font-size: 13px;
+  color: #777772;
+}
+
+.testCountdown {
+  font-size: 12px;
+  font-weight: 700;
+  color: #444;
+  background: #f0f0ec;
+  border-radius: 99px;
+  padding: 3px 9px;
+  align-self: flex-start;
+}
+
+.testActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 700px) {
+  .testCard {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .testActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
