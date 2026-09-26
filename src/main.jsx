@@ -101,7 +101,13 @@ function App() {
     </header>
 
     <main>
-      {page==="pregled" && <Dashboard tests={upcoming} onAdd={()=>{setEditing({id:uid(),name:"",date:"",reminders:[]});setPage("novi")}} onEdit={t=>{setEditing(t);setPage("novi")}} onDelete={remove} />}
+      {page==="pregled" && <Dashboard
+  tests={upcoming}
+  onAdd={()=>{setEditing({id:uid(),name:"",date:"",reminders:[]});setPage("novi")}}
+  onImport={()=>setImporting(true)}
+  onEdit={t=>{setEditing(t);setPage("novi")}}
+  onDelete={remove}
+/>}
       {page==="kalendar" && <Calendar tests={upcoming} onEdit={t=>{setEditing(t);setPage("novi")}} />}
       {page==="novi" && <TestForm initial={editing} defaultReminder={data.settings.defaultReminder} onCancel={()=>setPage("pregled")} onSave={addTest} />}
       {page==="podesavanja" && <Settings data={data} setData={setData} notify={notify} />}
